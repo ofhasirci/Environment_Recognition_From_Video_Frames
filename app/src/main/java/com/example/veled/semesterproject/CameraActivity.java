@@ -23,11 +23,14 @@ import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Mat;
 
 import java.io.File;
+import java.util.LinkedList;
 
 public class CameraActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2{
 
-    private AsynchronousCompare task;
-    public Mat matFrame, matCloneFrame, matObject;
+    private AsynchronousCompare task=null;
+    LinkedList<AsynchronousCompare> tasks = new LinkedList<>();
+    LinkedList<Mat> matDescriptors = new LinkedList<>();
+    public Mat matFrame, matCloneFrame;
     int result;
     int index = 1;
     private int PER_REQ = 1;
@@ -52,12 +55,11 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
     //Size size = new Size(160,120);
     boolean saveOrNot = true;
     String path;
-    int count = 0;
-    int count2;
+    int count;
 
-    public native int compareFrames(long addr1,long addr2, int count, String path);
+    public native int compareFrames(long addr1);
     public native void saveToFile(long addr, String path, String descName, String frmName);
-    public native int getFromFile(long addr, String path, String desName);
+    public native void clearMap();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,16 +78,8 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
         tv.setText("beyylee");
         Bundle data = getIntent().getExtras();
         saveOrNot = data.getBoolean("save");
+        count = data.getInt("count");
 
-        SharedPreferences preferences = getSharedPreferences("myPreferences", MODE_PRIVATE);
-        count = preferences.getInt("count", 0);
-        count2=count-1;
-
-        if (!saveOrNot) {
-            matObject = new Mat();
-            int i = getFromFile(matObject.getNativeObjAddr(), path, "descriptor" + count2);
-            tv.append("cols:" + String.valueOf(i) + " ** " + String.valueOf(count2) + " ** "+ String.valueOf(count) + " ** ");
-        }
 
         if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.CAMERA)!= PackageManager.PERMISSION_GRANTED &&
                 ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED){
@@ -104,9 +98,6 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             mLoaderCallBack.onManagerConnected(LoaderCallbackInterface.SUCCESS);
             Log.d("TAG", "initdebug true");
         }
-
-
-
     }
 
     @Override
@@ -121,7 +112,14 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             openCvCameraView.disableView();
         }
         Log.d("TAG", "ON DESTROY");
-        task.cancel(true);
+        for (AsynchronousCompare asy: tasks){
+            if (!asy.isCancelled()){
+                asy.cancel(true);
+            }
+        }
+        tasks.clear();
+        matDescriptors.clear();
+        clearMap();
     }
 
     public void compareOrSave(){
@@ -131,10 +129,13 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             public void run() {
 
                 if (saveOrNot) {
-                    task = new AsynchronousCompare(matCloneFrame);
+                    task = new AsynchronousCompare(matCloneFrame, count);
+                    count++;
+                    Log.e("TAG", "COUNT: "+count);
                     task.execute();
                 }else {
-                    task = new AsynchronousCompare(matCloneFrame, count);
+                    task = new AsynchronousCompare(matCloneFrame);
+                    tasks.add(task);
                     task.execute();
                 }
             }
@@ -148,16 +149,15 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
         private String frameName;
         private int mCount;
 
-        public AsynchronousCompare(Mat mat){
-            this.mat = mat;
-            name = pullName(count);
-            frameName = pullFrameName(count);
-            count++;
-        }
-
         public AsynchronousCompare(Mat mat, int mCount){
             this.mat = mat;
-            this.mCount = mCount-1;
+            this.mCount = mCount;
+            name = pullName(mCount);
+            frameName = pullFrameName(mCount);
+        }
+
+        public AsynchronousCompare(Mat mat){
+            this.mat = mat;
         }
 
         @Override
@@ -165,23 +165,26 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
             if(!isCancelled()) {
                 if (!saveOrNot) {
-                    result = compareFrames(mat.getNativeObjAddr(), matObject.getNativeObjAddr(), mCount, path);
+                    result = compareFrames(mat.getNativeObjAddr());
                     return result;
                 } else {
                     saveToFile(mat.getNativeObjAddr(), path, name, frameName);
                     return -1;
                 }
-            }else return 0;
+            }else{
+                return 0;
+            }
         }
 
         @Override
         protected void onPostExecute(Integer aVoid) {
 
-            if (aVoid<0){
+            /*if (aVoid<0){
                 Toast.makeText(CameraActivity.this, "Saved", Toast.LENGTH_SHORT).show();
             }else{
                 tv.append(String.valueOf(aVoid)+" ");
-            }
+            }*/
+            tv.append(String.valueOf(aVoid)+" ");
             if (aVoid>=250 ){
                 Toast.makeText(CameraActivity.this, "Buldu", Toast.LENGTH_SHORT).show();
             }
