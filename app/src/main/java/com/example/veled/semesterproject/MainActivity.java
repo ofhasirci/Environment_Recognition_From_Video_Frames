@@ -75,10 +75,9 @@ public class MainActivity extends AppCompatActivity {
         getFrames.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                progressBar.setVisibility(View.VISIBLE);
                 getff = getFromFile(path, count);
                 if (getff){
-                    tv.append(" getFromFile is working ");
+                    tv.append(" getFromFile is working");
                     progressBar.setProgress(100);
                     Toast.makeText(getApplicationContext(), "Ready to compare", Toast.LENGTH_SHORT).show();
                 }
@@ -94,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
             Log.e("TAG", "COUNT: " +count);
         }else {
             count = 0;
+            tv.setText(String.valueOf(count));
         }
     }
 

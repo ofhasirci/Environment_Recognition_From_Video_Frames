@@ -12,6 +12,18 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <sstream>
+#include <future>
+#include <thread>
+#include <opencv2/highgui/highgui_c.h>
+
+
+using namespace std;
+using namespace cv;
+
+
+
+std::map<string, Mat> descriptorMap;
 
 
 cv::Mat getDescriptor(cv::Mat image){
@@ -31,13 +43,15 @@ cv::Mat getDescriptor(cv::Mat image){
     return descriptor;
 }
 
+template <typename T>
+std::string to_string(T value){
+    std::ostringstream os;
+    os << value;
+    return os.str();
+}
 
 
-using namespace std;
-using namespace cv;
 
-
-std::map<string, Mat> descriptorMap;
 
 extern "C" {
 
@@ -48,13 +62,15 @@ Java_com_example_veled_semesterproject_MainActivity_getFromFile(JNIEnv *env, job
     Mat img;
 
     cv::FileStorage fs(path, FileStorage::READ);
-    if (fs.isOpened()){
+    if (fs.isOpened()) {
         __android_log_print(ANDROID_LOG_ERROR, "TAG", "FS IS OPEN --> FROMFILE");
-        for (int i=0; i<cnt; i++){
-            fs["descriptor"+i] >> img;
-            descriptorMap.insert(std::map<string, Mat>::value_type("descriptor"+i, img));
+        for (int i = 0; i < cnt; i++) {
+            std::string desc = "descriptor";
+            fs[desc+to_string(i)] >> img;
+            descriptorMap.insert(std::map<string, Mat>::value_type(desc+to_string(i), img));
             __android_log_print(ANDROID_LOG_ERROR, "TAG", "INSERTING TO MAP--- %d", i);
-        }
+            __android_log_print(ANDROID_LOG_ERROR, "TAG", "descriptor%d cols: %d", i, img.cols);
+            }
     }
 
     fs.release();
@@ -74,8 +90,10 @@ Java_com_example_veled_semesterproject_CameraActivity_clearMap(JNIEnv *env, jobj
 JNIEXPORT void JNICALL
 Java_com_example_veled_semesterproject_CameraActivity_saveToFile(JNIEnv *env,
                                                                  jobject instance,
-                                                                 jlong addr, jstring filepath, jstring descName, jstring frmName) {
-    Mat & image = *(Mat *) addr;
+                                                                 jlong addr, jstring filepath,
+                                                                 jstring descName,
+                                                                 jstring frmName) {
+    Mat &image = *(Mat *) addr;
     const char *path = env->GetStringUTFChars(filepath, NULL);
     const char *name = env->GetStringUTFChars(descName, NULL);
     const char *fname = env->GetStringUTFChars(frmName, NULL);
@@ -90,7 +108,7 @@ Java_com_example_veled_semesterproject_CameraActivity_saveToFile(JNIEnv *env,
         fs << name << descriptor;
     } else __android_log_print(ANDROID_LOG_ERROR, "TAG", "fs is NOT opened");
 
-    if (fs.isOpened()){
+    if (fs.isOpened()) {
         __android_log_print(ANDROID_LOG_ERROR, "TAG", "fs write frame");
         fs << fname << image;
     }
@@ -106,31 +124,28 @@ Java_com_example_veled_semesterproject_CameraActivity_saveToFile(JNIEnv *env,
 JNIEXPORT jint JNICALL
 Java_com_example_veled_semesterproject_CameraActivity_compareFrames(JNIEnv *env,
                                                                     jobject instance,
-                                                                    jlong addr1) {
+                                                                    jlong addr1, jint index) {
 
 
-    Mat & image = *(Mat *) addr1;
+    Mat &image = *(Mat *) addr1;
     Mat descriptor2;
     Mat descriptor1;
 
     descriptor1 = getDescriptor(image);
-
-
     std::vector<DMatch> matches12, matches21;
     std::vector<DMatch> goodMatches;
     cv::BFMatcher matcher;
 
 
-    /*for (std::map<string, Mat>::iterator it = descriptorMap.begin(); it != descriptorMap.end(); ++it){
-        //descriptor2 = it->second;
+        descriptor2 = descriptorMap.at("descriptor"+to_string(index));
+    __android_log_print(ANDROID_LOG_ERROR, "TAG", "descriptor1 size:  %d", descriptor1.rows);
+    __android_log_print(ANDROID_LOG_ERROR, "TAG", "descriptor2 size:  %d", descriptor2.rows);
 
-        __android_log_print(ANDROID_LOG_ERROR, "TAG", "COLS ARE NOT EQUAL -- %d", it->second.cols);
-
-        /*if (descriptor1.type()==it->second.type() && descriptor1.cols == it->second.cols) {
+    if (descriptor1.type() == descriptor2.type() && descriptor1.cols == descriptor2.cols) {
             __android_log_print(ANDROID_LOG_ERROR, "TAG", "COLS ARE EQUAL");
 
-            matcher.match(descriptor1, it->second, matches12);
-            matcher.match(it->second, descriptor1, matches21);
+            matcher.match(descriptor1, descriptor2, matches12);
+            matcher.match(descriptor2, descriptor1, matches21);
 
 
             for (int i = 0; i < matches12.size(); i++) {
@@ -140,19 +155,10 @@ Java_com_example_veled_semesterproject_CameraActivity_compareFrames(JNIEnv *env,
                     goodMatches.push_back(forward);
                 }
             }
+            __android_log_print(ANDROID_LOG_ERROR, "TAG", "GoodMatch Size: -- %d, k value: %d", goodMatches.size(), index);
+        } else __android_log_print(ANDROID_LOG_ERROR, "TAG", "COLS ARE NOT EQUAL -- %d", descriptor2.cols);
 
-        } else{
-            __android_log_print(ANDROID_LOG_ERROR, "TAG", "COLS ARE NOT EQUAL -- %d", it->second.cols);
-        }
+    return goodMatches.size();
 
-        if (goodMatches.size() >= 250){
-            break;
-        }
-    }*/
-
-    return descriptor2.cols ;
-
-}
-
-
+    }
 }

@@ -22,7 +22,7 @@ model {
     }
     android.ndk {
         moduleName = "myModule"
-        toolchain = 'clang'
+        toolchain = "clang"
         cppFlags.addAll("-std=c++11", "-fexceptions", "-frtti")
         cppFlags.add("-I${file("C:/opencvLib/OpenCV-2.4.11-android-sdk/OpenCV-android-sdk/sdk/native/jni/include")}".toString())
         ldLibs.addAll("android", "EGL", "GLESv2", "dl", "log", "z")

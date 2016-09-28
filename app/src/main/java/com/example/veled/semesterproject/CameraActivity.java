@@ -14,13 +14,14 @@ import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Mat;
+import org.opencv.core.Size;
+import org.opencv.imgproc.Imgproc;
 
 import java.io.File;
 import java.util.LinkedList;
@@ -29,7 +30,6 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
     private AsynchronousCompare task=null;
     LinkedList<AsynchronousCompare> tasks = new LinkedList<>();
-    LinkedList<Mat> matDescriptors = new LinkedList<>();
     public Mat matFrame, matCloneFrame;
     int result;
     int index = 1;
@@ -52,12 +52,12 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
         }
     };
     TextView tv;
-    //Size size = new Size(160,120);
+    Size size = new Size(160,120);
     boolean saveOrNot = true;
     String path;
     int count;
 
-    public native int compareFrames(long addr1);
+    public native int compareFrames(long addr1, int i);
     public native void saveToFile(long addr, String path, String descName, String frmName);
     public native void clearMap();
 
@@ -101,41 +101,51 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
     }
 
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
+    protected void onPause() {
+        super.onPause();
 
         SharedPreferences.Editor editor = getSharedPreferences("myPreferences", MODE_PRIVATE).edit();
         editor.putInt("count", count);
-        editor.commit();
-
-        if (openCvCameraView != null){
-            openCvCameraView.disableView();
-        }
-        Log.d("TAG", "ON DESTROY");
+        editor.apply();
         for (AsynchronousCompare asy: tasks){
             if (!asy.isCancelled()){
                 asy.cancel(true);
             }
         }
+
         tasks.clear();
-        matDescriptors.clear();
         clearMap();
+
     }
 
-    public void compareOrSave(){
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        if (openCvCameraView != null){
+            openCvCameraView.disableView();
+        }
+
+        Log.e("TAG", "ONDESTROY CAMACT..");
+
+    }
+
+    public void compareOrSave(final int frameIndex){
 
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
 
-                if (saveOrNot) {
+                if (!saveOrNot) {
+                    task = new AsynchronousCompare(matCloneFrame);
+                    tasks.add(task);
+                    Log.e("TAG", "Tasks size---> "+ tasks.size());
+                    task.execute();
+                }else if (frameIndex==15){
                     task = new AsynchronousCompare(matCloneFrame, count);
                     count++;
                     Log.e("TAG", "COUNT: "+count);
-                    task.execute();
-                }else {
-                    task = new AsynchronousCompare(matCloneFrame);
-                    tasks.add(task);
+                    Log.e("TAG", "FRAMEINDEX: "+frameIndex);
                     task.execute();
                 }
             }
@@ -162,18 +172,25 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
         @Override
         protected Integer doInBackground(Void... params) {
-
-            if(!isCancelled()) {
-                if (!saveOrNot) {
-                    result = compareFrames(mat.getNativeObjAddr());
-                    return result;
-                } else {
-                    saveToFile(mat.getNativeObjAddr(), path, name, frameName);
+            if (!saveOrNot) {
+                for (int i=0;i<count;i++){
+                    result = compareFrames(mat.getNativeObjAddr(), i);
+                    if (result>=80){
+                        return i;
+                    }
+                    if (isCancelled()){
+                        task.cancel(true);
+                        break;
+                    }
+               }
+                return -1;
+            } else if (!isCancelled()) {
+                saveToFile(mat.getNativeObjAddr(), path, name, frameName);
+                return -1;
+                }else {
+                    task.cancel(true);
                     return -1;
                 }
-            }else{
-                return 0;
-            }
         }
 
         @Override
@@ -185,9 +202,8 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
                 tv.append(String.valueOf(aVoid)+" ");
             }*/
             tv.append(String.valueOf(aVoid)+" ");
-            if (aVoid>=250 ){
-                Toast.makeText(CameraActivity.this, "Buldu", Toast.LENGTH_SHORT).show();
-            }
+            //tasks.getLast().cancel(true);
+            //task.cancel(true);
         }
     }
 
@@ -228,27 +244,27 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
         index++;
         matFrame = inputFrame.rgba();
         matCloneFrame = matFrame.clone();
-        //Imgproc.resize(matCloneFrame, matCloneFrame, size);
+        Imgproc.resize(matCloneFrame, matCloneFrame, size);
 
         switch (index){
             case 1:{
-                compareOrSave();
+                compareOrSave(index);
                 break;
             }
             case 8:{
-                compareOrSave();
+                compareOrSave(index);
                 break;
             }
             case 15:{
-                compareOrSave();
+                compareOrSave(index);
                 break;
             }
             case 22:{
-                compareOrSave();
+                compareOrSave(index);
                 break;
             }
             case 29:{
-                compareOrSave();
+                compareOrSave(index);
                 break;
             }
             case 30:{
